@@ -18,7 +18,7 @@ import subprocess
 import uuid
 
 WKHTMLTOIMAGE_PATH = "C:\\Program Files\\wkhtmltopdf\\bin\\wkhtmltoimage.exe"
-OUTFILE = 'image_key.csv'
+OUTFILE = 'image_key.csv'  # The file that keeps track of image files that have been created
 RESOLUTION = (1024, 768)  # width, height: 4/3
 THUMB_SIZE = (128, 128)
 IMAGE_FILE_FORMAT = 'jpg'
