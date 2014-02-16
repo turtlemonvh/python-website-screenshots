@@ -16,9 +16,9 @@ import os
 import csv
 import sys
 import subprocess
-import threading
 import uuid
-from Queue import Queue
+from threading import Thread
+from Queue import Queue, Empty
 
 WKHTMLTOIMAGE_PATH = "wkhtmltoimage"
 # The name of the file that keeps track of image files that have been created
@@ -28,7 +28,7 @@ RESOLUTION = (1024, 768)
 THUMB_SIZE = (128, 128)
 IMAGE_FILE_FORMAT = 'jpg'
 # The number of threads to use to run wkhtmltopdf / PIL functions
-QUEUE_LENGTH = 3
+NTHREADS = 3
 
 # Check if PIL is available, if it is we will make thumbnails
 try:
@@ -65,26 +65,25 @@ def create_thumbnail_from_image(fullsize_name):
     return outfile
 
 
-class ScreenshotMaker(threading.Thread):
-    """Container for managing separate worker threads """
-    def __init__(self, url):
-        self.url = url
-        self.result = None
-        threading.Thread.__init__(self)
-
-    def run(self):
-        """Create both images for a given URL
-        Return the url processed and the names of the file(s) created """
+def process_url(q, keywriter):
+    """Process a single url
+    Called within a thread """
+    while True:
         try:
-            fullsize_name = create_image_from_url(self.url)
+            url = q.get(True, 1)
+        except Empty:
+            return
+        try:
+            fullsize_name = create_image_from_url(url)
             if Image:
                 thumb_name = create_thumbnail_from_image(fullsize_name)
-                self.result = (self.url, fullsize_name, thumb_name)
+                result = (url, fullsize_name, thumb_name)
             else:
-                self.result = (self.url, fullsize_name)
-            print "SUCCESS: Created screenshot for: '{}'".format(self.url)
+                result = (url, fullsize_name)
+            keywriter.writerow(result)
+            print "SUCCESS: Created screenshot for: '{}'".format(url)
         except IOError:
-            print "ERROR: Cannot create screenshot for {}".format(self.url)
+            print "ERROR: Cannot create screenshot for {}".format(url)
 
 
 def get_processed_urls():
@@ -98,18 +97,6 @@ def get_processed_urls():
         return []
 
 
-def process_file_queue(q, expected_total, keywriter):
-    """Runs in a thread to process the results from the
-    download queue as they come in """
-    nfinished = 0
-    while nfinished < expected_total:
-        thread = q.get(True)
-        thread.join()
-        nfinished += 1
-        if thread.result:
-            keywriter.writerow(thread.result)
-
-
 def process_file(filename):
     """The main function for 'process' mode """
     processed_urls = get_processed_urls()
@@ -118,29 +105,33 @@ def process_file(filename):
         for url in urls:
             url = url.rstrip()  # clean up spaces
             # Ignore urls we've already processed
-            if url not in processed_urls:
+            if url and url not in processed_urls:
                 url_list.append(url)
 
     if not url_list:
         print "No new urls to process.  Exiting."
         sys.exit(0)
 
-    # Process urls, keeping track of their names as we go
-    q = Queue(QUEUE_LENGTH)
     with open(OUTFILE, 'ab+') as image_key:
         keywriter = csv.writer(image_key)
-        # Start a thread to consume queue results as they come in
-        writer_thread = threading.Thread(target=process_file_queue,
-                                         args=(q, len(url_list), keywriter))
-        writer_thread.start()
-        for url in url_list:
-            worker_thread = ScreenshotMaker(url)
-            worker_thread.start()
-            # Block until space is open in the queue
-            q.put(worker_thread, block=True)
 
-        # Give the thread time to finish before exiting
-        writer_thread.join()
+        # Set up queue and threadpool
+        q = Queue(NTHREADS*2)
+        threadpool = []
+        for i in range(NTHREADS):
+            t = Thread(target=process_url,
+                       args=(q, keywriter))
+            t.start()
+            threadpool.append(t)
+
+        for url in url_list:
+            # Block until space is open in the queue
+            q.put(url, block=True)
+
+        # Wait until all the threads have finished
+        for t in threadpool:
+            t.join()
+        sys.exit(1)
 
 
 def search(term):
