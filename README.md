@@ -2,9 +2,11 @@
 
 A simple python script creating a bunch of screenshots of webpages using the [wkhtmltopdf](http://wkhtmltopdf.org/) utility.
 
+It runs reasonably fast by processing a few operations concurrently.
+
 ## Setup
 
-At the very least, [download wkhtmltopdf](http://wkhtmltopdf.org/) and change the `WKHTMLTOIMAGE_PATH` in `url_to_image.py` to the location of the `wkhtmltoimage` binary.  The current location is the default installation location for Windows installs.
+At the very least, [download wkhtmltopdf](http://wkhtmltopdf.org/) and change the `WKHTMLTOIMAGE_PATH` in `url_to_image.py` to the location of the `wkhtmltoimage` binary.  The default setting assumes `wkhtmltoimage` is in the working directory or on your path.
 
 If [PIL](http://www.pythonware.com/products/pil/) is installed, it will be used to create thumbnails of the images created by wkhtmltopdf.
 
