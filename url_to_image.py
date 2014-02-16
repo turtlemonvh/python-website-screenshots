@@ -69,10 +69,7 @@ def process_url(q, keywriter):
     """Process a single url
     Called within a thread """
     while True:
-        try:
-            url = q.get(True, 1)
-        except Empty:
-            return
+        url = q.get(True)
         try:
             fullsize_name = create_image_from_url(url)
             if Image:
@@ -84,6 +81,7 @@ def process_url(q, keywriter):
             print "SUCCESS: Created screenshot for: '{}'".format(url)
         except IOError:
             print "ERROR: Cannot create screenshot for {}".format(url)
+        q.task_done()
 
 
 def get_processed_urls():
@@ -121,6 +119,7 @@ def process_file(filename):
         for i in range(NTHREADS):
             t = Thread(target=process_url,
                        args=(q, keywriter))
+            t.daemon = True
             t.start()
             threadpool.append(t)
 
@@ -128,9 +127,8 @@ def process_file(filename):
             # Block until space is open in the queue
             q.put(url, block=True)
 
-        # Wait until all the threads have finished
-        for t in threadpool:
-            t.join()
+        # Wait until the queue is empty
+        q.join()
         sys.exit(1)
 
 
